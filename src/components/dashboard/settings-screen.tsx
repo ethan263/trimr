@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { OrganizationProfile } from "@clerk/nextjs";
 import {
   Building2,
   Clock3,
@@ -29,7 +28,7 @@ export function SettingsScreen() {
   const { organization, orgSlug } = useWorkspace();
   const workspaceReady = useWorkspaceReady();
   const { draftVersion } = usePlatformRefresh();
-  const isPersonalWorkspace = Boolean(organization && !organization.clerkOrgId);
+  const isPersonalWorkspace = organization?.mode === "personal" || !organization?.mode;
   const { data: publicSite } = useRefreshableServerData(
     () => getCurrentDraftAction(orgSlug),
     [organization?._id, orgSlug, draftVersion],
@@ -127,26 +126,16 @@ export function SettingsScreen() {
         </section>
       ) : null}
 
-      {organization?.clerkOrgId ? (
+      {organization?.mode === "organization" ? (
         <section className="mt-8 space-y-4">
           <SectionHeading
             title="Members & access"
-            description="Manage Clerk organization details, members, roles, and invitations."
+            description="Manage members, roles, and invitations for this workspace."
           />
           <div className="min-w-0 overflow-hidden rounded-xl border border-black/10 bg-white p-2 sm:p-4">
-            <OrganizationProfile
-              routing="hash"
-              appearance={{
-                elements: {
-                  rootBox: "w-full",
-                  cardBox: "w-full shadow-none",
-                  card: "w-full shadow-none border-0",
-                  navbar: "border-r border-black/10",
-                  navbarButton: "text-foreground",
-                  pageScrollBox: "p-0",
-                },
-              }}
-            />
+            <p className="px-4 py-8 text-sm text-muted-foreground text-center">
+              Member management is coming soon.
+            </p>
           </div>
         </section>
       ) : null}

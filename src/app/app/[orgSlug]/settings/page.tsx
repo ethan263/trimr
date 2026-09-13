@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { SettingsScreen } from "@/components/dashboard/settings-screen";
 import {
-  canAccessBillingAndSettings,
+  isWorkspaceAdmin,
   requireCurrentOrganizationForRouteSlug,
 } from "@/lib/data/auth";
 
@@ -13,7 +13,7 @@ type SettingsPageProps = {
 export default async function SettingsPage({ params }: SettingsPageProps) {
   const { orgSlug } = await params;
   const current = await requireCurrentOrganizationForRouteSlug(orgSlug);
-  if (!canAccessBillingAndSettings(current.auth)) {
+  if (!isWorkspaceAdmin(current.auth)) {
     redirect(`/app/${orgSlug}`);
   }
 

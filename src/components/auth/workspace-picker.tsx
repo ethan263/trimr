@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { OrganizationList } from "@clerk/nextjs";
 import { ArrowRight, Building2, UserRound } from "lucide-react";
 
 import { Brand } from "@/components/brand";
@@ -11,7 +10,6 @@ import type { AccessibleWorkspace } from "@/lib/workspaces";
 
 type WorkspacePickerProps = {
   workspaces: AccessibleWorkspace[];
-  afterOrganizationUrl: string;
 };
 
 function roleLabel(role: string | undefined, mode: AccessibleWorkspace["mode"]) {
@@ -24,7 +22,6 @@ function roleLabel(role: string | undefined, mode: AccessibleWorkspace["mode"]) 
 
 export function WorkspacePicker({
   workspaces,
-  afterOrganizationUrl,
 }: WorkspacePickerProps) {
   const personalWorkspaces = workspaces.filter(
     (workspace) => workspace.mode === "personal",
@@ -48,9 +45,8 @@ export function WorkspacePicker({
                 Pick the business you want to operate.
               </h1>
               <p className="mt-5 max-w-sm text-sm leading-6 text-white/60">
-                Open your personal workspace or a Clerk organization you belong
-                to. Each workspace keeps its own bookings, agent, and public
-                page.
+                Open your personal workspace or a team workspace you belong to.
+                Each workspace keeps its own bookings, agent, and public page.
               </p>
             </div>
 
@@ -105,7 +101,7 @@ export function WorkspacePicker({
                 <div className="space-y-2">
                   {organizationWorkspaces.map((workspace) => (
                     <div
-                      key={workspace.clerkOrgId ?? workspace.slug}
+                      key={workspace.slug}
                       className="rounded-lg border border-black/10 bg-white px-4 py-3"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -129,24 +125,11 @@ export function WorkspacePicker({
 
             <div className="space-y-3">
               <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                Select or create an organization
+                Actions
               </p>
-              <OrganizationList
-                hidePersonal
-                afterCreateOrganizationUrl={afterOrganizationUrl}
-                afterSelectOrganizationUrl={afterOrganizationUrl}
-                appearance={{
-                  elements: {
-                    rootBox: "w-full",
-                    cardBox: "w-full shadow-none",
-                    card: "w-full border border-black/10 bg-white shadow-none",
-                    headerTitle: "font-heading text-2xl tracking-tight",
-                    headerSubtitle: "text-muted-foreground",
-                    organizationListCreateOrganizationActionButton:
-                      "border-primary/20 text-primary hover:bg-primary/5",
-                  },
-                }}
-              />
+              <p className="text-sm text-muted-foreground">
+                Switch workspaces by choosing from the list above.
+              </p>
             </div>
           </div>
         </div>

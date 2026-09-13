@@ -6,30 +6,9 @@ import {
   bootstrapCurrentOrganization,
   listAccessibleWorkspaces,
 } from "@/lib/data/organizations";
-import {
-  buildAfterOrganizationUrl,
-  buildBillingCheckoutUrl,
-  normalizePlanIntent,
-} from "@/lib/marketing/plan-intent";
-import { readPlanIntentCookie } from "@/lib/marketing/plan-intent-cookie";
 
-type AppIndexPageProps = {
-  searchParams: Promise<{ plan?: string }>;
-};
-
-export default async function AppIndexPage({ searchParams }: AppIndexPageProps) {
+export default async function AppIndexPage() {
   const session = await requireAppSession();
-  const { plan } = await searchParams;
-  const planIntent =
-    normalizePlanIntent(plan) ?? (await readPlanIntentCookie());
-
-  if (session.orgSlug) {
-    redirect(
-      planIntent
-        ? buildBillingCheckoutUrl(session.orgSlug, planIntent)
-        : `/app/${session.orgSlug}`,
-    );
-  }
 
   const workspaces = await listAccessibleWorkspaces(session.userId!);
 
@@ -39,26 +18,12 @@ export default async function AppIndexPage({ searchParams }: AppIndexPageProps) 
       locale: "en-ZA",
       currency: "ZAR",
     });
-    redirect(
-      planIntent
-        ? buildBillingCheckoutUrl(workspace.slug, planIntent)
-        : `/app/${workspace.slug}`,
-    );
+    redirect(`/app/${workspace.slug}`);
   }
 
   if (workspaces.length === 1) {
-    const workspace = workspaces[0]!;
-    redirect(
-      planIntent
-        ? buildBillingCheckoutUrl(workspace.slug, planIntent)
-        : `/app/${workspace.slug}`,
-    );
+    redirect(`/app/${workspaces[0]!.slug}`);
   }
 
-  return (
-    <WorkspacePicker
-      workspaces={workspaces}
-      afterOrganizationUrl={buildAfterOrganizationUrl(planIntent)}
-    />
-  );
+  return <WorkspacePicker workspaces={workspaces} />;
 }

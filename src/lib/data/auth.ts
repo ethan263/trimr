@@ -1,21 +1,18 @@
 import "server-only";
 
-import { createClerkClient } from "@clerk/backend";
-
 import type { BackendTerminology, Organization } from "@/components/dashboard/data";
 import { getAppAuthSession } from "@/lib/auth/require-app-session";
 import {
   MANAGE_OPERATIONS_PERMISSION,
-  canAccessBillingAndSettings,
   isWorkspaceAdmin,
   isWorkspaceOperator,
   permissionsForMembershipRole,
 } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { WorkspaceMode } from "@/lib/workspaces";
 
 export {
   MANAGE_OPERATIONS_PERMISSION,
-  canAccessBillingAndSettings,
   isWorkspaceAdmin,
   isWorkspaceOperator,
 } from "@/lib/rbac";
@@ -23,7 +20,7 @@ export {
 export type OrganizationRow = {
   id: string;
   clerk_org_id: string | null;
-  owner_clerk_user_id: string | null;
+  owner_user_id: string | null;
   name: string;
   slug: string;
   timezone: string;
@@ -34,13 +31,9 @@ export type OrganizationRow = {
   updated_at: string;
 };
 
-export type WorkspaceMode = "organization" | "personal";
-
-export type ActiveClerkOrganization = {
+export type ActiveOrganizationContext = {
   mode: WorkspaceMode;
-  clerkOrgId?: string;
-  clerkOrgSlug?: string;
-  role?: string;
+  role: string;
   userId: string;
   permissions: string[];
 };
@@ -51,7 +44,6 @@ export function mapOrganization(
 ): Organization {
   return {
     _id: row.id,
-    clerkOrgId: row.clerk_org_id ?? undefined,
     name: row.name,
     slug: row.slug,
     timezone: row.timezone,
@@ -64,76 +56,46 @@ export function mapOrganization(
   };
 }
 
-/** Clerk org when present; otherwise personal workspace scoped to the signed-in user. */
-export async function requireActiveClerkOrganization(): Promise<ActiveClerkOrganization> {
+/** Resolve the current user's active workspace context from the Supabase session. */
+export async function requireActiveOrganizationContext(): Promise<ActiveOrganizationContext> {
   const session = await getAppAuthSession();
   if (!session.userId) {
     throw new Error("Authentication required.");
   }
-
-  if (!session.orgId) {
-    return {
-      mode: "personal",
-      userId: session.userId,
-      role: "owner",
-      permissions: [MANAGE_OPERATIONS_PERMISSION],
-    };
-  }
-
-  const role = session.orgRole?.startsWith("org:")
-    ? session.orgRole.slice(4)
-    : session.orgRole;
-
-  const permissions: string[] = [];
-  if (session.has?.({ permission: MANAGE_OPERATIONS_PERMISSION })) {
-    permissions.push(MANAGE_OPERATIONS_PERMISSION);
-  } else {
-    permissions.push(...permissionsForMembershipRole(role));
-  }
-
   return {
-    mode: "organization",
-    clerkOrgId: session.orgId,
-    clerkOrgSlug: session.orgSlug ?? undefined,
-    role: role ?? undefined,
+    mode: "personal",
+    role: "owner",
     userId: session.userId,
-    permissions,
+    permissions: [MANAGE_OPERATIONS_PERMISSION],
   };
 }
 
-async function lookupOrganizationForAuth(clerkAuth: ActiveClerkOrganization) {
+async function lookupContextOrganization(
+  context: ActiveOrganizationContext,
+): Promise<OrganizationRow | null> {
   const supabase = createAdminClient();
-  if (clerkAuth.mode === "organization" && clerkAuth.clerkOrgId) {
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("*")
-      .eq("clerk_org_id", clerkAuth.clerkOrgId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as OrganizationRow | null;
-  }
-
+  // Personal workspace.
   const { data, error } = await supabase
     .from("organizations")
     .select("*")
-    .eq("owner_clerk_user_id", clerkAuth.userId)
+    .eq("owner_user_id", context.userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data as OrganizationRow | null;
+  return (data as OrganizationRow | null) ?? null;
 }
 
 export async function requireCurrentOrganization() {
-  const clerkAuth = await requireActiveClerkOrganization();
-  // Service role after Clerk verification: dashboard tenancy is enforced by
-  // clerk_org_id / owner_clerk_user_id filters below, not by JWT RLS claims.
-  const data = await lookupOrganizationForAuth(clerkAuth);
+  const context = await requireActiveOrganizationContext();
+  // Service role after auth verification: dashboard tenancy is enforced by
+  // subscriber/owner filters, not by JWT RLS claims.
+  const data = await lookupContextOrganization(context);
   if (!data) {
     throw new Error(
       "This workspace has not been initialized yet. Run bootstrapCurrentOrganization first.",
     );
   }
   return {
-    auth: clerkAuth,
+    auth: context,
     organization: data,
     supabase: createAdminClient(),
   };
@@ -147,48 +109,23 @@ export async function requireCurrentOrganizationAdmin() {
   return current;
 }
 
-function normalizeClerkRole(role: string | null | undefined): string | undefined {
-  if (!role) return undefined;
-  return role.startsWith("org:") ? role.slice(4) : role;
-}
-
-async function verifyClerkOrganizationMembership(args: {
-  userId: string;
-  clerkOrgId: string;
-}): Promise<{ role: string; permissions: string[] }> {
-  const secretKey = process.env.CLERK_SECRET_KEY?.trim();
-  if (!secretKey) {
-    throw new Error("CLERK_SECRET_KEY is not configured.");
+export async function requireCurrentOrganizationOperator() {
+  const current = await requireCurrentOrganization();
+  if (!isWorkspaceOperator(current.auth)) {
+    throw new Error(
+      "The organization operator permission is required for this action.",
+    );
   }
-
-  const clerk = createClerkClient({ secretKey });
-  const memberships = await clerk.users.getOrganizationMembershipList({
-    userId: args.userId,
-    limit: 100,
-  });
-  const membership = memberships.data.find(
-    (entry) => entry.organization.id === args.clerkOrgId,
-  );
-  if (!membership) {
-    throw new Error("You are not a member of this business.");
-  }
-
-  const role = normalizeClerkRole(membership.role);
-  if (!role) {
-    throw new Error("Could not resolve your role for this business.");
-  }
-
-  return {
-    role,
-    permissions: permissionsForMembershipRole(role),
-  };
+  return current;
 }
 
 /**
- * Resolve the workspace from the URL slug when Clerk's session token briefly
- * lacks an organization claim (common during server-action transitions).
+ * Resolve the workspace from the URL slug for the signed-in user. Allows
+ * access if the user owns the personal workspace or is a member of the team.
  */
-export async function requireCurrentOrganizationForRouteSlug(routeOrgSlug: string) {
+export async function requireCurrentOrganizationForRouteSlug(
+  routeOrgSlug: string,
+) {
   const session = await getAppAuthSession();
   if (!session.userId) {
     throw new Error("Authentication required.");
@@ -207,59 +144,51 @@ export async function requireCurrentOrganizationForRouteSlug(routeOrgSlug: strin
 
   const organization = data as OrganizationRow;
 
-  if (organization.owner_clerk_user_id === session.userId) {
-    return {
-      auth: {
-        mode: "personal",
-        clerkOrgSlug: routeOrgSlug,
-        role: "owner",
-        userId: session.userId,
-        permissions: [MANAGE_OPERATIONS_PERMISSION],
-      } satisfies ActiveClerkOrganization,
-      organization,
-      supabase,
-    };
-  }
-
-  const clerkOrgId = organization.clerk_org_id;
-  if (!clerkOrgId) {
+  const membership = await resolveMembership(session.userId, organization.id);
+  if (!membership) {
     throw new Error("You do not have access to this business.");
-  }
-
-  let role: string | undefined;
-  const permissions: string[] = [];
-
-  if (session.orgId) {
-    if (session.orgId !== clerkOrgId) {
-      throw new Error("Switch to this business before continuing.");
-    }
-    role = normalizeClerkRole(session.orgRole);
-    if (session.has?.({ permission: MANAGE_OPERATIONS_PERMISSION })) {
-      permissions.push(MANAGE_OPERATIONS_PERMISSION);
-    } else {
-      permissions.push(...permissionsForMembershipRole(role));
-    }
-  } else {
-    const membership = await verifyClerkOrganizationMembership({
-      userId: session.userId,
-      clerkOrgId,
-    });
-    role = membership.role;
-    permissions.push(...membership.permissions);
   }
 
   return {
     auth: {
-      mode: "organization",
-      clerkOrgId,
-      clerkOrgSlug: routeOrgSlug,
-      role,
+      mode: organization.owner_user_id
+        ? ("personal" as const)
+        : ("organization" as const),
+      role: membership.role,
       userId: session.userId,
-      permissions,
-    } satisfies ActiveClerkOrganization,
+      permissions: permissionsForMembershipRole(membership.role),
+    },
     organization,
     supabase,
   };
+}
+
+async function resolveMembership(
+  userId: string,
+  organizationId: string,
+): Promise<{ role: string } | null> {
+  const supabase = createAdminClient();
+  const { data: membership, error } = await supabase
+    .from("organization_memberships")
+    .select("role")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (membership) {
+    return { role: membership.role as string };
+  }
+
+  // Fall back to personal ownership (legacy personal rows).
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("owner_user_id")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (org?.owner_user_id === userId) {
+    return { role: "owner" };
+  }
+  return null;
 }
 
 export async function requireCurrentOrganizationAdminForRouteSlug(
@@ -268,16 +197,6 @@ export async function requireCurrentOrganizationAdminForRouteSlug(
   const current = await requireCurrentOrganizationForRouteSlug(routeOrgSlug);
   if (!isWorkspaceAdmin(current.auth)) {
     throw new Error("An organization admin role is required for this action.");
-  }
-  return current;
-}
-
-export async function requireCurrentOrganizationOperator() {
-  const current = await requireCurrentOrganization();
-  if (!isWorkspaceOperator(current.auth)) {
-    throw new Error(
-      "The organization operator permission is required for this action.",
-    );
   }
   return current;
 }

@@ -3,28 +3,11 @@ import type { Metadata } from "next";
 
 import { PublicSite } from "@/components/public-site/public-site";
 import { PublicSiteUnavailable } from "@/components/public-site/public-site-states";
-import { organizationHasFeatureByOrganizationId } from "@/lib/billing/subscriptions";
-import {
-  getAgentSessionConfig,
-  getPublishedBySlug,
-} from "@/lib/data/public-site";
+import { getPublishedBySlug } from "@/lib/data/public-site";
 
 const getPublishedSite = cache((siteSlug: string) =>
   getPublishedBySlug(siteSlug),
 );
-
-const getAgentSession = cache((siteSlug: string) =>
-  getAgentSessionConfig(siteSlug),
-);
-
-const getAgentFeatures = cache(async (organizationId: string) => {
-  const [text, voice] = await Promise.all([
-    organizationHasFeatureByOrganizationId(organizationId, "web_agent"),
-    organizationHasFeatureByOrganizationId(organizationId, "browser_voice"),
-  ]);
-
-  return { text, voice };
-});
 
 export async function generateMetadata({
   params,
@@ -60,25 +43,18 @@ export default async function PublicSitePage({
   params: Promise<{ siteSlug: string }>;
 }) {
   const { siteSlug } = await params;
-  const [publishedSite, agentSessionConfig] = await Promise.all([
-    getPublishedSite(siteSlug),
-    getAgentSession(siteSlug),
-  ]);
+  const publishedSite = await getPublishedSite(siteSlug);
 
   if (!publishedSite) {
     return <PublicSiteUnavailable />;
   }
 
-  const agentFeatures = agentSessionConfig
-    ? await getAgentFeatures(agentSessionConfig.organizationId)
-    : { text: false, voice: false };
-
   return (
     <PublicSite
       siteSlug={publishedSite.site.siteSlug}
       publishedSite={publishedSite}
-      textAgentEnabled={agentFeatures.text}
-      voiceAgentEnabled={agentFeatures.voice}
+      textAgentEnabled={true}
+      voiceAgentEnabled={true}
     />
   );
 }

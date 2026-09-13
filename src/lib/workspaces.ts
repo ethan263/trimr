@@ -1,8 +1,9 @@
+export type WorkspaceMode = "personal" | "organization";
+
 export type AccessibleWorkspace = {
   slug: string;
   name: string;
-  mode: "personal" | "organization";
-  clerkOrgId?: string;
-  role?: string;
+  mode: WorkspaceMode;
+  role: string;
   isBootstrapped: boolean;
 };

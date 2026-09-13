@@ -14,7 +14,6 @@ import {
   type ElevenLabsConversationSnapshot,
 } from "@/lib/elevenlabs/conversations";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { organizationHasFeatureByOrganizationId } from "@/lib/billing/subscriptions";
 import { sanitizeSiteConfig } from "@/lib/data/site-config";
 
 type ConversationRow = {
@@ -140,7 +139,6 @@ export async function getCurrentAgent(): Promise<AgentConfiguration> {
 export type PublicSessionConfig = {
   organizationId: string;
   publicSiteId: string;
-  clerkOrgId?: string;
   siteSlug: string;
   mode: "text" | "voice" | "widget";
   webAgentId: string | null;
@@ -187,7 +185,6 @@ export async function requestPublicSession(args: {
   return {
     organizationId: organization.id as string,
     publicSiteId: site.id as string,
-    clerkOrgId: organization.clerk_org_id ?? undefined,
     siteSlug: site.site_slug,
     mode: args.mode,
     webAgentId: (integration.web_agent_id as string | null) ?? null,
@@ -411,7 +408,7 @@ export async function recordPublicConversation(args: {
 
   const { data: organization } = await supabase
     .from("organizations")
-    .select("id, clerk_org_id, owner_clerk_user_id")
+    .select("id, owner_user_id")
     .eq("id", site.organization_id)
     .maybeSingle();
   if (!organization) return null;
@@ -420,8 +417,8 @@ export async function recordPublicConversation(args: {
   if (snapshot) {
     const matchesOrg =
       snapshot.organizationIdHint === organization.id ||
-      snapshot.externalUserId === organization.clerk_org_id ||
-      snapshot.externalUserId === organization.owner_clerk_user_id ||
+      snapshot.externalUserId === organization.id ||
+      snapshot.externalUserId === organization.owner_user_id ||
       snapshot.siteSlug?.toLowerCase() === siteSlug;
     // If ElevenLabs returned initiation metadata, require a tenant match.
     if (
@@ -541,13 +538,6 @@ export async function updateAgentWorkspaceSettings(args: {
 export async function getConversationAnalytics(): Promise<ConversationAnalytics> {
   const { organization, supabase } = await requireCurrentOrganizationOperator();
 
-  const hasAnalytics = await organizationHasFeatureByOrganizationId(
-    organization.id,
-    "advanced_analytics",
-  );
-  if (!hasAnalytics) {
-    throw new Error("Advanced analytics requires Pro.");
-  }
   const now = Date.now();
   const since30 = iso(now - 30 * DAY_MS);
   const since7 = now - 7 * DAY_MS;
@@ -661,13 +651,12 @@ export async function syncRecentConversationsFromElevenLabs(): Promise<{
     if (!snapshot) continue;
     const orgRow = organization as {
       id: string;
-      clerk_org_id: string | null;
-      owner_clerk_user_id: string | null;
+      owner_user_id: string | null;
     };
     const matches =
       snapshot.organizationIdHint === orgRow.id ||
-      snapshot.externalUserId === orgRow.clerk_org_id ||
-      snapshot.externalUserId === orgRow.owner_clerk_user_id ||
+      snapshot.externalUserId === orgRow.id ||
+      snapshot.externalUserId === orgRow.owner_user_id ||
       (siteSlug && snapshot.siteSlug?.toLowerCase() === siteSlug);
     if (!matches) continue;
     await upsertConversationRow({

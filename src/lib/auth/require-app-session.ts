@@ -1,17 +1,29 @@
 import "server-only";
 
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
+import { createClient } from "@/lib/supabase/server";
+
 /**
- * Read the Clerk session for `/app` routes.
+ * Read the Supabase session for `/app` routes.
  *
- * Personal workspaces do not require a Clerk organization or a completed
- * choose-organization session task — only `userId` matters. Pending sessions
- * still carry `userId`, so we must not treat them as signed-out here.
+ * Returns the authenticated user (id + email). Workspaces are resolved from
+ * organization_memberships / organizations.owner_user_id, not from a JWT org
+ * claim.
  */
 export async function getAppAuthSession() {
-  return auth({ treatPendingAsSignedOut: false });
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error || !user) {
+    return { userId: null as string | null, email: null as string | null };
+  }
+  return {
+    userId: user.id as string,
+    email: user.email ?? (null as string | null),
+  };
 }
 
 /**

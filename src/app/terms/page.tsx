@@ -24,37 +24,31 @@ export default function TermsPage() {
       <h2>1. The service</h2>
       <p>
         flippinCalendar provides online booking, team scheduling, customer
-        messaging, and optional AI concierge features (text and voice) for
-        businesses in South Africa and elsewhere. Features depend on your
-        subscription plan.
+        messaging, and AI concierge features (text and voice) for
+        businesses in South Africa and elsewhere.
       </p>
 
       <h2>2. Accounts and eligibility</h2>
       <p>
         You must be authorised to act for your business. You are responsible for
         activity under your account and for keeping sign-in credentials secure.
-        Authentication is provided through Clerk.
+        Authentication is provided through Supabase Auth.
       </p>
 
-      <h2>3. Plans and billing</h2>
+      <h2>3. Access and fees</h2>
       <ul>
         <li>
-          <strong>Core</strong> is free. <strong>Pro</strong> unlocks AI
-          concierge features and is billed in ZAR via PayFast.
+          All flippinCalendar features are currently included at no cost while
+          the service is in preview.
         </li>
         <li>
-          Pro is sold as a <strong>one-time payment for a 30-day access
-          period</strong>, not an automatically recurring subscription. We send
-          renewal reminders before expiry; you must complete a new checkout to
-          extend Pro access.
-        </li>
-        <li>
-          Prices are shown on our pricing page and may change with notice for
-          future periods.
+          We reserve the right to introduce paid plans or fees in the future.
+          Any such changes will be communicated in advance and apply only to
+          future access periods.
         </li>
         <li>
           Refunds are handled at our discretion unless required by applicable
-          consumer law. Contact <strong>[billing@flippincalendar.co.za]</strong>.
+          consumer law.
         </li>
       </ul>
 
@@ -62,7 +56,7 @@ export default function TermsPage() {
       <p>You agree not to:</p>
       <ul>
         <li>use the service unlawfully or to harass others;</li>
-        <li>attempt to bypass security, quotas, or plan limits;</li>
+        <li>attempt to bypass security or quotas;</li>
         <li>upload malware or infringe third-party rights;</li>
         <li>
           use AI features to generate unlawful, deceptive, or harmful content.

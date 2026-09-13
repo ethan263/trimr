@@ -1,9 +1,7 @@
 import "server-only";
 
-import { createClerkClient } from "@clerk/backend";
-
 import type { Organization } from "@/components/dashboard/data";
-import { getAppAuthSession } from "@/lib/auth/require-app-session";
+import { requireCurrentOrganizationForRouteSlug } from "@/lib/data/auth";
 import {
   DEFAULT_TERMINOLOGY,
   assertIanaTimezone,
@@ -14,17 +12,16 @@ import {
   type BackendTerminology,
 } from "@/lib/data/shared";
 import { resolveElevenLabsAgentId } from "@/lib/elevenlabs/config";
-import { ensureCoreSubscription } from "@/lib/billing/subscriptions";
-import { requireCurrentOrganizationForRouteSlug } from "@/lib/data/auth";
+import { requireActiveOrganizationContext } from "@/lib/data/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { AccessibleWorkspace } from "@/lib/workspaces";
+import type { AccessibleWorkspace, WorkspaceMode } from "@/lib/workspaces";
 
 export type { AccessibleWorkspace } from "@/lib/workspaces";
 
 type OrganizationRow = {
   id: string;
   clerk_org_id: string | null;
-  owner_clerk_user_id: string | null;
+  owner_user_id: string | null;
   name: string;
   slug: string;
   timezone: string;
@@ -35,21 +32,14 @@ type OrganizationRow = {
   updated_at: string;
 };
 
-export type ActiveClerkOrganization = {
-  mode: "organization" | "personal";
-  clerkOrgId?: string;
-  clerkOrgSlug?: string;
-  role?: string;
-  userId: string;
-};
+function modeForRow(row: OrganizationRow): WorkspaceMode {
+  return row.owner_user_id ? "personal" : "organization";
+}
 
-function viewOrganization(
-  row: OrganizationRow,
-  role?: string,
-): Organization {
+function viewOrganization(row: OrganizationRow, role?: string): Organization {
   return {
     _id: row.id,
-    clerkOrgId: row.clerk_org_id ?? undefined,
+    mode: modeForRow(row),
     name: row.name,
     slug: row.slug,
     timezone: row.timezone,
@@ -62,11 +52,6 @@ function viewOrganization(
   };
 }
 
-function normalizeClerkRole(role: string | null | undefined): string | undefined {
-  if (!role) return undefined;
-  return role.startsWith("org:") ? role.slice(4) : role;
-}
-
 export async function listAccessibleWorkspaces(
   userId: string,
 ): Promise<AccessibleWorkspace[]> {
@@ -76,7 +61,7 @@ export async function listAccessibleWorkspaces(
   const { data: personal, error: personalError } = await supabase
     .from("organizations")
     .select("*")
-    .eq("owner_clerk_user_id", userId)
+    .eq("owner_user_id", userId)
     .maybeSingle();
   if (personalError) throw new Error(personalError.message);
   if (personal) {
@@ -90,104 +75,56 @@ export async function listAccessibleWorkspaces(
     });
   }
 
-  const secretKey = process.env.CLERK_SECRET_KEY?.trim();
-  if (!secretKey) {
-    return workspaces;
-  }
+  const { data: memberships, error: membershipError } = await supabase
+    .from("organization_memberships")
+    .select("organization_id, role")
+    .eq("user_id", userId);
+  if (membershipError) throw new Error(membershipError.message);
 
-  const clerk = createClerkClient({ secretKey });
-  const memberships = await clerk.users.getOrganizationMembershipList({
-    userId,
-    limit: 100,
-  });
-
-  for (const membership of memberships.data) {
-    const clerkOrgId = membership.organization.id;
+  for (const membership of memberships ?? []) {
     const { data: orgRow, error: orgError } = await supabase
       .from("organizations")
       .select("*")
-      .eq("clerk_org_id", clerkOrgId)
+      .eq("id", membership.organization_id)
       .maybeSingle();
     if (orgError) throw new Error(orgError.message);
-
-    const role = normalizeClerkRole(membership.role);
-    const clerkSlug = membership.organization.slug?.trim();
+    const row = orgRow as OrganizationRow | null;
+    if (!row || row.owner_user_id) continue; // personal rows handled above
     workspaces.push({
-      slug: (orgRow as OrganizationRow | null)?.slug ?? clerkSlug ?? clerkOrgId,
-      name:
-        (orgRow as OrganizationRow | null)?.name ??
-        membership.organization.name,
+      slug: row.slug,
+      name: row.name,
       mode: "organization",
-      clerkOrgId,
-      role,
-      isBootstrapped: Boolean(orgRow),
+      role: (membership.role as string) || "member",
+      isBootstrapped: true,
     });
   }
 
   return workspaces;
 }
 
-export async function requireActiveClerkOrganization(): Promise<ActiveClerkOrganization> {
-  const session = await getAppAuthSession();
-  if (!session.userId) {
-    throw new Error("Authentication required.");
-  }
-
-  if (!session.orgId) {
-    return {
-      mode: "personal",
-      userId: session.userId,
-      role: "owner",
-    };
-  }
-
-  const clerkOrgId = session.orgId;
-  const role = session.orgRole?.startsWith("org:")
-    ? session.orgRole.slice(4)
-    : session.orgRole;
-
-  return {
-    mode: "organization",
-    clerkOrgId,
-    clerkOrgSlug: session.orgSlug ?? undefined,
-    role: role ?? undefined,
-    userId: session.userId,
-  };
+export async function requireActiveOrganizationContext2() {
+  return requireActiveOrganizationContext();
 }
 
 export async function getCurrentOrganization(): Promise<Organization | null> {
-  const clerkAuth = await requireActiveClerkOrganization();
+  const context = await requireActiveOrganizationContext();
   const supabase = createAdminClient();
-
-  if (clerkAuth.mode === "organization" && clerkAuth.clerkOrgId) {
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("*")
-      .eq("clerk_org_id", clerkAuth.clerkOrgId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!data) return null;
-    return viewOrganization(data as OrganizationRow, clerkAuth.role);
-  }
-
   const { data, error } = await supabase
     .from("organizations")
     .select("*")
-    .eq("owner_clerk_user_id", clerkAuth.userId)
+    .eq("owner_user_id", context.userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return viewOrganization(data as OrganizationRow, clerkAuth.role ?? "owner");
+  return viewOrganization(data as OrganizationRow, context.role ?? "owner");
 }
 
-export async function getWorkspaceForUser(
-  userId: string,
-): Promise<Organization | null> {
+export async function getWorkspaceForUser(userId: string): Promise<Organization | null> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("organizations")
     .select("*")
-    .eq("owner_clerk_user_id", userId)
+    .eq("owner_user_id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
@@ -207,32 +144,15 @@ export async function bootstrapCurrentOrganization(args: {
   currency?: string;
   locale?: string;
 }): Promise<Organization> {
-  const clerkAuth = await requireActiveClerkOrganization();
-  if (
-    clerkAuth.mode === "organization" &&
-    clerkAuth.role !== "admin" &&
-    clerkAuth.role !== "owner"
-  ) {
-    throw new Error("An organization admin must initialize this workspace.");
-  }
-
+  const context = await requireActiveOrganizationContext();
   const existing = await getCurrentOrganization();
   if (existing) {
     await ensureWorkspaceRows(existing._id, existing.name, existing.slug);
-    await ensureCoreSubscription(existing._id);
+    await ensureOwnerMembership(existing._id, context.userId);
     return existing;
   }
 
-  const name = requiredTrimmed(
-    args.name ??
-      clerkAuth.clerkOrgSlug
-        ?.split("-")
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ") ??
-      "My business",
-    "name",
-    120,
-  );
+  const name = requiredTrimmed(args.name ?? "My business", "name", 120);
   const timezone = optionalTrimmed(args.timezone, "timezone", 100) ?? "UTC";
   assertIanaTimezone(timezone);
   const currency = (args.currency ?? "ZAR").trim().toUpperCase();
@@ -246,10 +166,7 @@ export async function bootstrapCurrentOrganization(args: {
     throw new Error(`Invalid locale: "${locale}".`);
   }
 
-  const preferredSlug =
-    clerkAuth.mode === "organization" && clerkAuth.clerkOrgSlug
-      ? slugify(clerkAuth.clerkOrgSlug)
-      : slugify(name);
+  const preferredSlug = slugify(name);
   const supabase = createAdminClient();
 
   const { data: slugOwner, error: slugError } = await supabase
@@ -259,10 +176,7 @@ export async function bootstrapCurrentOrganization(args: {
     .maybeSingle();
   if (slugError) throw new Error(slugError.message);
 
-  const slugSuffix =
-    clerkAuth.mode === "organization" && clerkAuth.clerkOrgId
-      ? slugify(clerkAuth.clerkOrgId).slice(-8)
-      : clerkAuth.userId.slice(-8);
+  const slugSuffix = context.userId.slice(-8);
   const slug = slugOwner ? `${preferredSlug}-${slugSuffix}` : preferredSlug;
 
   const defaultAgentId = resolveElevenLabsAgentId();
@@ -270,10 +184,7 @@ export async function bootstrapCurrentOrganization(args: {
   const { data: organization, error: insertError } = await supabase
     .from("organizations")
     .insert({
-      clerk_org_id:
-        clerkAuth.mode === "organization" ? clerkAuth.clerkOrgId ?? null : null,
-      owner_clerk_user_id:
-        clerkAuth.mode === "personal" ? clerkAuth.userId : null,
+      owner_user_id: context.userId,
       name,
       slug,
       timezone,
@@ -285,11 +196,11 @@ export async function bootstrapCurrentOrganization(args: {
     .single();
 
   if (insertError) {
-    // Concurrent bootstrap: return the row created by the other request.
     if (insertError.code === "23505") {
       const raced = await getCurrentOrganization();
       if (raced) {
         await ensureWorkspaceRows(raced._id, raced.name, raced.slug);
+        await ensureOwnerMembership(raced._id, context.userId);
         return raced;
       }
     }
@@ -298,9 +209,23 @@ export async function bootstrapCurrentOrganization(args: {
 
   const orgRow = organization as OrganizationRow;
   await ensureWorkspaceRows(orgRow.id, name, slug, defaultAgentId);
-  await ensureCoreSubscription(orgRow.id);
+  await ensureOwnerMembership(orgRow.id, context.userId);
 
-  return viewOrganization(orgRow, clerkAuth.role);
+  return viewOrganization(orgRow, context.role ?? "owner");
+}
+
+async function ensureOwnerMembership(organizationId: string, userId: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("organization_memberships").upsert(
+    {
+      organization_id: organizationId,
+      user_id: userId,
+      role: "owner",
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "organization_id,user_id" },
+  );
+  if (error) throw new Error(error.message);
 }
 
 async function ensureWorkspaceRows(
@@ -376,15 +301,7 @@ export async function updateCurrentOrganization(args: {
   locale?: string;
   terminology?: BackendTerminology;
 }): Promise<Organization> {
-  const clerkAuth = await requireActiveClerkOrganization();
-  if (
-    clerkAuth.mode === "organization" &&
-    clerkAuth.role !== "admin" &&
-    clerkAuth.role !== "owner"
-  ) {
-    throw new Error("An organization admin role is required for this action.");
-  }
-
+  const context = await requireActiveOrganizationContext();
   const current = await getCurrentOrganization();
   if (!current) {
     throw new Error(
@@ -456,9 +373,7 @@ export async function updateCurrentOrganization(args: {
   const { data, error } = await supabase
     .from("organizations")
     .update({
-      name: args.name
-        ? requiredTrimmed(args.name, "name", 120)
-        : current.name,
+      name: args.name ? requiredTrimmed(args.name, "name", 120) : current.name,
       timezone: timezone ?? current.timezone,
       currency: currency ?? current.currency,
       locale: locale ?? current.locale,
@@ -470,5 +385,5 @@ export async function updateCurrentOrganization(args: {
     .single();
 
   if (error) throw new Error(error.message);
-  return viewOrganization(data as OrganizationRow, clerkAuth.role);
+  return viewOrganization(data as OrganizationRow, context.role ?? "owner");
 }

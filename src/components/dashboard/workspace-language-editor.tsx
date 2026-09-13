@@ -210,9 +210,8 @@ export function WorkspaceLanguageEditor({
   }));
   const [saving, setSaving] = useState(false);
   const canEdit = isWorkspaceAdmin({
-    mode: organization.clerkOrgId ? "organization" : "personal",
+    mode: organization.mode ?? "personal",
     role: organization.role,
-    clerkOrgId: organization.clerkOrgId,
   });
   const normalizedDraft = useMemo(
     () => normalizedTerminology(draft),

@@ -1,9 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { NextResponse } from "next/server";
 
 import { createAgentDynamicVariables } from "@/lib/agent-context";
-import { organizationHasFeatureByOrganizationId } from "@/lib/billing/subscriptions";
+import { getAppAuthSession } from "@/lib/auth/require-app-session";
 import { listRules } from "@/lib/data/availability";
 import { getCurrentAgent } from "@/lib/data/agents";
 import { listOfferings } from "@/lib/data/catalog";
@@ -72,7 +71,7 @@ function weeklyHoursFromRules(
 }
 
 export async function POST() {
-  const session = await auth();
+  const session = await getAppAuthSession();
   if (!session.userId) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
@@ -80,35 +79,6 @@ export async function POST() {
   const organization = await getCurrentOrganization();
   if (!organization) {
     return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
-  }
-
-  const hasBrowserVoice = await organizationHasFeatureByOrganizationId(
-    organization._id,
-    "browser_voice",
-  );
-  if (!hasBrowserVoice) {
-    return NextResponse.json(
-      { error: "This business plan does not include browser audio." },
-      { status: 403 },
-    );
-  }
-  const hasWebAgent = await organizationHasFeatureByOrganizationId(
-    organization._id,
-    "web_agent",
-  );
-
-  const isPersonalOwner = !organization.clerkOrgId;
-  const canOperate =
-    isPersonalOwner ||
-    session.has?.({ permission: "org:operations_hub:manage" }) ||
-    session.has?.({ role: "org:admin" }) ||
-    session.has?.({ role: "org:owner" }) ||
-    session.has?.({ role: "org:operator" });
-  if (!canOperate) {
-    return NextResponse.json(
-      { error: "Organization operator access is required." },
-      { status: 403 },
-    );
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
@@ -166,9 +136,9 @@ export async function POST() {
           knowledgeItems,
           weeklyHours,
           organizationId: organization._id,
-          externalUserId: organization.clerkOrgId ?? session.userId!,
-          textChatEnabled: hasWebAgent,
-          voiceChatEnabled: hasBrowserVoice,
+          externalUserId: organization._id,
+          textChatEnabled: true,
+          voiceChatEnabled: true,
           personaGuidance: persona
             ? resolvePersonaGuidance(persona)
             : undefined,

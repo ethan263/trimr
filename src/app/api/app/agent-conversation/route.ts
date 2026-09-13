@@ -1,28 +1,14 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
+import { getAppAuthSession } from "@/lib/auth/require-app-session";
 import { recordOperatorConversation } from "@/lib/data/agents";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
+  const session = await getAppAuthSession();
   if (!session.userId) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-
-  const canOperate =
-    !session.orgId ||
-    session.has?.({ permission: "org:operations_hub:manage" }) ||
-    session.has?.({ role: "org:admin" }) ||
-    session.has?.({ role: "org:owner" }) ||
-    session.has?.({ role: "org:operator" });
-  // Personal workspaces have no org claim; operator check runs in recordOperatorConversation.
-  if (!canOperate) {
-    return NextResponse.json(
-      { error: "Organization operator access is required." },
-      { status: 403 },
-    );
   }
 
   const body = (await request.json().catch(() => null)) as {

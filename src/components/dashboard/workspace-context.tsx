@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
 
 import {
   defaultTerminology,
@@ -22,6 +21,7 @@ import {
   bootstrapCurrentOrganizationAction,
   fetchCurrentOrganizationAction,
 } from "@/app/actions/organizations";
+import { createClient } from "@/lib/supabase/client";
 
 type WorkspaceContextValue = {
   orgSlug: string;
@@ -43,10 +43,7 @@ export function WorkspaceProvider({
   orgSlug: string;
   initialOrganization?: Organization | null;
 }) {
-  const { isLoaded } = useAuth();
-  const clerkUser = useUser();
-  const user =
-    clerkUser.isLoaded && clerkUser.isSignedIn ? clerkUser.user : null;
+  const [user, setUser] = useState<{ fullName: string | null; firstName: string | null } | null>(null);
   const [organization, setOrganization] = useState<Organization | null | undefined>(
     () => (initialOrganization === undefined ? undefined : initialOrganization),
   );
@@ -57,7 +54,6 @@ export function WorkspaceProvider({
   const loadedOrgSlug = useRef<string | null>(
     initialOrganization ? orgSlug : null,
   );
-
   const prevOrgSlugRef = useRef(orgSlug);
 
   const refreshOrganization = useCallback(async () => {
@@ -66,14 +62,19 @@ export function WorkspaceProvider({
   }, [orgSlug]);
 
   useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user ? { fullName: user.user_metadata.full_name ?? null, firstName: user.user_metadata.first_name ?? null } : null);
+    });
+  }, []);
+
+  useEffect(() => {
     if (organization) {
       hadOrganization.current = true;
     }
   }, [organization]);
 
   useEffect(() => {
-    if (!isLoaded) return;
-
     const slugChanged = prevOrgSlugRef.current !== orgSlug;
     if (slugChanged) {
       requestedBootstrap.current = false;
@@ -107,10 +108,10 @@ export function WorkspaceProvider({
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, orgSlug]);
+  }, [orgSlug]);
 
   useEffect(() => {
-    if (!isLoaded || organization !== null || requestedBootstrap.current) {
+    if (organization !== null || requestedBootstrap.current) {
       return;
     }
 
@@ -118,10 +119,7 @@ export function WorkspaceProvider({
     setIsCreating(true);
     setBootstrapError(null);
     void bootstrapCurrentOrganizationAction({
-      name:
-        user?.fullName?.trim() ||
-        user?.firstName?.trim() ||
-        undefined,
+      name: user?.fullName?.trim() || user?.firstName?.trim() || undefined,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       locale: navigator.language,
     })
@@ -140,7 +138,7 @@ export function WorkspaceProvider({
         );
       })
       .finally(() => setIsCreating(false));
-  }, [isLoaded, organization, orgSlug, user?.firstName, user?.fullName]);
+  }, [organization, orgSlug, user?.firstName, user?.fullName]);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({

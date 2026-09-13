@@ -1,11 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 /**
- * Supabase client authenticated with the active Clerk session token.
- * Requires Supabase third-party auth for `clerk.flippincalendar.co.za`
- * (or your dev *.clerk.accounts.dev domain). See docs/clerk-supabase-integration.md.
+ * Supabase cookie-based client for server components, route handlers and
+ * server actions. Sessions are kept in the `sb-*` cookies maintained by
+ * src/proxy.ts middleware; no external identity provider is involved.
  */
 export async function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,15 +16,23 @@ export async function createClient() {
     );
   }
 
-  const { getToken } = await auth();
+  const cookieStore = await cookies();
 
   return createServerClient(url, publishableKey, {
     cookies: {
-      getAll: async () => (await cookies()).getAll(),
-      setAll: async () => {
-        // Clerk owns auth cookies; Supabase cookie writes are not needed here.
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          for (const { name, value, options } of cookiesToSet) {
+            cookieStore.set(name, value, options);
+          }
+        } catch {
+          // Called from a Server Component; the middleware refreshes the
+          // session cookie, so failing to write here is safe to ignore.
+        }
       },
     },
-    accessToken: async () => (await getToken()) ?? null,
   });
 }

@@ -1,15 +1,16 @@
 export const MANAGE_OPERATIONS_PERMISSION = "org:operations_hub:manage";
 
+export type WorkspaceMode = "personal" | "organization";
+
 export type WorkspaceAuthRole = {
-  mode?: "personal" | "organization";
+  mode?: WorkspaceMode;
   role?: string;
   permissions?: readonly string[];
-  clerkOrgId?: string | null;
 };
 
-/** Workspace owner or Clerk org admin — billing, settings, member management. */
+/** Workspace owner or team admin — settings, member management. */
 export function isWorkspaceAdmin(auth: WorkspaceAuthRole): boolean {
-  if (auth.mode === "personal" || !auth.clerkOrgId) {
+  if (auth.mode === "personal") {
     return true;
   }
   return auth.role === "admin" || auth.role === "owner";
@@ -17,26 +18,22 @@ export function isWorkspaceAdmin(auth: WorkspaceAuthRole): boolean {
 
 /** Can use the operations hub (bookings, offerings, agent, public site). */
 export function isWorkspaceOperator(auth: WorkspaceAuthRole): boolean {
-  if (auth.mode === "personal" || !auth.clerkOrgId) {
+  if (auth.mode === "personal") {
     return true;
   }
   if (isWorkspaceAdmin(auth)) {
     return true;
   }
-  if (auth.role === "operator") {
+  if (auth.role === "operator" || auth.role === "member") {
     return true;
   }
   return auth.permissions?.includes(MANAGE_OPERATIONS_PERMISSION) ?? false;
 }
 
-export function canAccessBillingAndSettings(auth: WorkspaceAuthRole): boolean {
-  return isWorkspaceAdmin(auth);
-}
-
-/** Infer hub permissions from a Clerk membership role when JWT claims are absent. */
+/** Infer hub permissions from a membership role. */
 export function permissionsForMembershipRole(role: string | undefined): string[] {
   if (!role) return [];
-  if (role === "admin" || role === "owner" || role === "operator") {
+  if (role === "admin" || role === "owner" || role === "operator" || role === "member") {
     return [MANAGE_OPERATIONS_PERMISSION];
   }
   return [];

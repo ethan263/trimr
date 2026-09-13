@@ -497,7 +497,7 @@ export function HeroDemoCardTrigger({
           {open ? (
             <motion.div
               // Portal to body so sticky header (z-50) cannot intercept clicks.
-              // Stay above Clerk drawers (z-index 10000) as well.
+              // Stay above high z-index overlays.
               className="fixed inset-0 z-[11000]"
               initial={reduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}

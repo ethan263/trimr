@@ -29,7 +29,6 @@ import {
   normalizeBooking,
   type Booking,
 } from "@/components/dashboard/data";
-import { FeatureEntitlementCard } from "@/components/dashboard/feature-gates";
 import {
   EmptyState,
   formatTime,
@@ -227,11 +226,6 @@ export function OverviewScreen() {
           </Card>
 
           <div className="space-y-6">
-            <div className="grid gap-3">
-              <FeatureEntitlementCard feature="web_agent" compact />
-              <FeatureEntitlementCard feature="browser_voice" compact />
-            </div>
-
             <Card className="bg-[#20201e] text-white ring-black/15">
               <CardHeader className="border-b border-white/10 pb-4">
                 <div>

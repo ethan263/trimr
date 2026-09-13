@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useEffect, useRef } from "react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -41,7 +40,6 @@ export function useLiveRefreshableServerData<T>(
   const organizationId = options?.organizationId;
   const liveTables = options?.liveTables;
   const liveTablesSignature = liveTablesKey(liveTables);
-  const { getToken, isLoaded } = useAuth();
 
   useEffect(() => {
     if (!enabled) return;
@@ -76,10 +74,10 @@ export function useLiveRefreshableServerData<T>(
   }, [enabled, pollIntervalMs]);
 
   useEffect(() => {
-    if (!enabled || !organizationId || !liveTablesSignature || !isLoaded) return;
+    if (!enabled || !organizationId || !liveTablesSignature) return;
 
     const tables = liveTablesSignature.split(",") as LiveTable[];
-    const supabase = createClient(async () => (await getToken()) ?? null);
+    const supabase = createClient();
     const channelName = `org-live:${organizationId}:${liveTablesSignature}`;
     let channel = supabase.channel(channelName);
     let debounceId: number | undefined;
@@ -110,7 +108,7 @@ export function useLiveRefreshableServerData<T>(
       if (debounceId !== undefined) window.clearTimeout(debounceId);
       void supabase.removeChannel(channel);
     };
-  }, [enabled, organizationId, liveTablesSignature, isLoaded, getToken]);
+  }, [enabled, organizationId, liveTablesSignature]);
 
   return { data, refresh };
 }

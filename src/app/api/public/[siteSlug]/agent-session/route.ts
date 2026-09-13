@@ -3,7 +3,6 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAgentDynamicVariables } from "@/lib/agent-context";
-import { organizationHasFeatureByOrganizationId } from "@/lib/billing/subscriptions";
 import {
   consumePublicSessionRateLimit,
   releasePublicSessionRateLimit,
@@ -75,31 +74,7 @@ export async function POST(
       );
     }
 
-    const [textEntitled, voiceEntitled, published] = await Promise.all([
-      organizationHasFeatureByOrganizationId(
-        sessionConfig.organizationId,
-        "web_agent",
-      ),
-      organizationHasFeatureByOrganizationId(
-        sessionConfig.organizationId,
-        "browser_voice",
-      ),
-      getPublishedBySlug(sessionConfig.siteSlug),
-    ]);
-
-    const requiredFeature = mode === "text" ? "web_agent" : "browser_voice";
-    const entitled = mode === "text" ? textEntitled : voiceEntitled;
-    if (!entitled) {
-      return NextResponse.json(
-        {
-          error:
-            requiredFeature === "web_agent"
-              ? "This organization’s plan does not include AI text chat."
-              : "This organization’s plan does not include browser audio.",
-        },
-        { status: 402 },
-      );
-    }
+    const published = await getPublishedBySlug(sessionConfig.siteSlug);
 
     if (!published) {
       return NextResponse.json(
@@ -164,10 +139,9 @@ export async function POST(
           knowledgeItems: published.knowledgeItems,
           weeklyHours: published.weeklyHours,
           organizationId: published.organization.id,
-          externalUserId:
-            published.organization.clerkOrgId ?? published.organization.id,
-          textChatEnabled: textEntitled,
-          voiceChatEnabled: voiceEntitled,
+          externalUserId: published.organization.id,
+          textChatEnabled: true,
+          voiceChatEnabled: true,
           personaGuidance: persona
             ? resolvePersonaGuidance(persona)
             : undefined,

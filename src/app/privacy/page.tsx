@@ -33,16 +33,11 @@ export default function PrivacyPage() {
       <ul>
         <li>
           <strong>Account data</strong> — name, email, and organisation details
-          when you sign in via Clerk.
+          when you sign in via Supabase Auth.
         </li>
         <li>
           <strong>Booking data</strong> — customer names, contact details, and
           appointment information entered by your business or customers.
-        </li>
-        <li>
-          <strong>Payment metadata</strong> — plan status and PayFast transaction
-          references. We do not store card numbers; payments are processed by
-          PayFast.
         </li>
         <li>
           <strong>AI concierge interactions</strong> — chat or voice session
@@ -59,16 +54,15 @@ export default function PrivacyPage() {
       <p>We use personal information to:</p>
       <ul>
         <li>provide and secure the flippinCalendar service;</li>
-        <li>process subscriptions and send billing or renewal notices;</li>
-        <li>operate AI concierge features enabled on your plan;</li>
+        <li>operate AI concierge features;</li>
         <li>comply with law and respond to lawful requests.</li>
       </ul>
 
       <h2>4. Processors and transfers</h2>
       <p>
-        We use trusted subprocessors, including Clerk (authentication), Supabase
-        (database hosting), Vercel (application hosting), PayFast (payments),
-        ElevenLabs (voice and chat AI), and Resend (transactional email). Data
+        We use trusted subprocessors, including Supabase (authentication and database
+        hosting), ElevenLabs (voice and chat AI),
+        and Resend (transactional email). Data
         may be processed outside South Africa where those providers operate;
         appropriate safeguards are applied contractually.
       </p>

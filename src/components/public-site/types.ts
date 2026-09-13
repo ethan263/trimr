@@ -9,7 +9,6 @@ export type PublishedSite = {
   };
   organization: {
     id: string;
-    clerkOrgId?: string;
     name: string;
     slug: string;
     timezone: string;

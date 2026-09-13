@@ -122,7 +122,7 @@ export function createAgentDynamicVariables({
   weeklyHours?: WeeklyHoursDay[];
   /** organizations.id UUID — preferred post-call webhook tenant key. */
   organizationId?: string;
-  /** Prefer Clerk org id; used as ElevenLabs-facing tenant identity. */
+  /** Organization UUID; used as ElevenLabs-facing tenant identity. */
   externalUserId?: string;
   textChatEnabled?: boolean;
   voiceChatEnabled?: boolean;

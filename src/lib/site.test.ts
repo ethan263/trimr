@@ -4,15 +4,12 @@ import {
   PRODUCTION_APP_ORIGIN,
   PRODUCTION_ORIGINS,
   getAppOrigin,
-  getClerkAuthorizedParties,
   getWebhooksOrigin,
 } from "@/lib/site";
 
 describe("site canonical helpers", () => {
   afterEach(() => {
     delete process.env.NEXT_PUBLIC_APP_URL;
-    delete process.env.CLERK_AUTHORIZED_PARTIES;
-    delete process.env.VERCEL_URL;
     vi.unstubAllEnvs();
   });
 
@@ -21,23 +18,19 @@ describe("site canonical helpers", () => {
     expect(getAppOrigin()).toBe("https://flippincalendar.co.za");
   });
 
-  it("expands Clerk parties to apex + www for production domain", () => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://www.flippincalendar.co.za";
-    expect(getClerkAuthorizedParties()).toEqual([...PRODUCTION_ORIGINS]);
-  });
-
-  it("honors CLERK_AUTHORIZED_PARTIES override", () => {
-    process.env.CLERK_AUTHORIZED_PARTIES =
-      "https://preview.example.com, https://flippincalendar.co.za";
-    expect(getClerkAuthorizedParties()).toEqual([
-      "https://preview.example.com",
-      "https://flippincalendar.co.za",
-    ]);
+  it("returns production origin when NODE_ENV is production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(getAppOrigin()).toBe("https://flippincalendar.co.za");
   });
 
   it("uses canonical www origin for webhooks in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(getWebhooksOrigin()).toBe("https://www.flippincalendar.co.za");
     expect(PRODUCTION_APP_ORIGIN).toBe("https://www.flippincalendar.co.za");
+  });
+
+  it("falls back to localhost in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(getAppOrigin()).toBe("http://localhost:3000");
   });
 });

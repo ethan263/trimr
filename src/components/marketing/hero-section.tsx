@@ -121,7 +121,7 @@ export function HeroSection() {
               <Check className="size-3 text-primary" /> No card needed
             </span>
             <span className="flex items-center gap-2">
-              <Check className="size-3 text-primary" /> Clerk + ElevenLabs
+              <Check className="size-3 text-primary" /> Supabase + ElevenLabs
             </span>
           </motion.div>
         </div>

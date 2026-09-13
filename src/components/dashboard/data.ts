@@ -22,7 +22,7 @@ export type BackendTerminology = {
 
 export type Organization = {
   _id: string;
-  clerkOrgId?: string;
+  mode?: "personal" | "organization";
   name: string;
   slug: string;
   timezone: string;

@@ -3,14 +3,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 import {
   Bot,
   CalendarDays,
   ChevronRight,
   CircleDollarSign,
   Clock3,
-  CreditCard,
   LayoutDashboard,
   LockKeyhole,
   PanelsTopLeft,
@@ -40,7 +38,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
-  canAccessBillingAndSettings,
+  isWorkspaceAdmin,
   type WorkspaceAuthRole,
 } from "@/lib/rbac";
 import {
@@ -103,7 +101,6 @@ function navigationFor(
     sections.push({
       label: "Business",
       items: [
-        { label: "Billing", segment: "billing", icon: CreditCard },
         { label: "Settings", segment: "settings", icon: Settings2 },
       ],
     });
@@ -198,11 +195,10 @@ function ShellChrome({
     { enabled: workspaceReady },
   );
   const workspaceAuth: WorkspaceAuthRole = {
-    mode: organization?.clerkOrgId ? "organization" : "personal",
+    mode: organization?.mode ?? "personal",
     role: organization?.role,
-    clerkOrgId: organization?.clerkOrgId,
   };
-  const includeAdminNav = canAccessBillingAndSettings(workspaceAuth);
+  const includeAdminNav = isWorkspaceAdmin(workspaceAuth);
   const navigation = navigationFor(terminology, includeAdminNav);
   const routeLabels = Object.fromEntries(
     navigation.flatMap((section) =>
@@ -237,28 +233,9 @@ function ShellChrome({
           </div>
 
           <div className="rounded-lg border border-black/10 bg-white/70 px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
-            {organization?.clerkOrgId ? (
-              <OrganizationSwitcher
-                hidePersonal
-                afterCreateOrganizationUrl="/app/:slug"
-                afterSelectOrganizationUrl="/app/:slug"
-                appearance={{
-                  elements: {
-                    rootBox: "w-full",
-                    organizationSwitcherTrigger:
-                      "w-full justify-between border-0 bg-transparent px-1 py-1 shadow-none",
-                    organizationPreviewMainIdentifier:
-                      "text-xs font-medium text-foreground",
-                    organizationPreviewSecondaryIdentifier:
-                      "text-[10px] text-muted-foreground",
-                  },
-                }}
-              />
-            ) : (
-              <p className="px-1 py-1 text-xs font-medium text-foreground">
-                {organization?.name ?? "Your business"}
-              </p>
-            )}
+            <p className="px-1 py-1 text-xs font-medium text-foreground">
+              {organization?.name ?? "Your business"}
+            </p>
           </div>
         </SidebarHeader>
 
@@ -347,9 +324,19 @@ function ShellChrome({
                 <PanelsTopLeft className="size-4" />
               </Link>
             </Button>
-            <UserButton
-              appearance={{ elements: { avatarBox: "size-8 rounded-md" } }}
-            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={async () => {
+                const { createClient } = await import("@/lib/supabase/client");
+                const supabase = createClient();
+                await supabase.auth.signOut();
+                window.location.href = "/sign-in";
+              }}
+            >
+              Sign out
+            </Button>
           </div>
         </header>
 

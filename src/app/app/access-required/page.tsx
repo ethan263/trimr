@@ -1,84 +1,18 @@
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Brand } from "@/components/brand";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/auth/require-app-session";
 import { listAccessibleWorkspaces } from "@/lib/data/organizations";
 import { isWorkspaceOperator } from "@/lib/rbac";
 
 export default async function AccessRequiredPage() {
   const session = await requireAppSession();
-
-  const authRole = {
-    mode: session.orgId ? ("organization" as const) : ("personal" as const),
-    role: session.orgRole?.startsWith("org:")
-      ? session.orgRole.slice(4)
-      : session.orgRole,
-    clerkOrgId: session.orgId,
-    permissions: session.has?.({ permission: "org:operations_hub:manage" })
-      ? ["org:operations_hub:manage"]
-      : [],
-  };
-
-  if (isWorkspaceOperator(authRole)) {
-    const slug =
-      session.orgSlug ??
-      (await listAccessibleWorkspaces(session.userId!))[0]?.slug;
-    if (slug) {
-      redirect(`/app/${slug}`);
-    }
-    redirect("/app");
+  const firstWorkspace = await listAccessibleWorkspaces(session.userId!)
+    .then((ws) => ws.find((w) => isWorkspaceOperator({ mode: w.mode, role: w.role })))
+    .catch(() => null);
+  if (firstWorkspace) {
+    redirect(`/app/${firstWorkspace.slug}`);
   }
+  redirect("/app");
 
-  return (
-    <main className="min-h-svh bg-[#f3f0e8] px-4 py-6 text-foreground sm:px-6 sm:py-10">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4">
-        <Brand />
-        <div className="flex items-center gap-3">
-          <OrganizationSwitcher
-            hidePersonal
-            afterCreateOrganizationUrl="/app/:slug"
-            afterSelectOrganizationUrl="/app/:slug"
-          />
-          <UserButton />
-        </div>
-      </div>
-
-      <Card className="mx-auto mt-12 max-w-2xl overflow-hidden border-black/10 bg-[#faf9f5] shadow-[0_24px_70px_rgba(44,36,24,0.12)] sm:mt-20">
-        <CardContent className="grid gap-8 p-7 sm:grid-cols-[auto_1fr] sm:p-10">
-          <div className="grid size-14 place-items-center rounded-xl bg-foreground text-background">
-            <ShieldCheck className="size-6" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-              Business access required
-            </p>
-            <h1 className="mt-3 font-heading text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
-              You’re signed in, but this business isn’t ready for you yet.
-            </h1>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
-              Ask a business administrator to confirm your membership or assign
-              you the Operator role. Plain members cannot access the operations
-              hub. Admins can also run{" "}
-              <code className="rounded bg-black/5 px-1.5 py-0.5 text-[0.85em]">
-                pnpm run clerk:rbac
-              </code>{" "}
-              after changing Clerk roles. Switch to another workspace you can
-              operate below.
-            </p>
-            <Button asChild variant="outline" className="mt-7">
-              <Link href="/app">
-                <ArrowLeft className="size-4" />
-                Choose another business
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </main>
-  );
+  return null;
 }

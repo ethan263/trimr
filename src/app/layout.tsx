@@ -4,13 +4,7 @@ import {
   IBM_Plex_Sans,
   Newsreader,
 } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
-import { ui } from "@clerk/ui";
-import { shadcn } from "@clerk/ui/themes";
-import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
-import { clerkBusinessLocalization } from "@/lib/clerk-business-localization";
-import { buildAuthCompleteUrl } from "@/lib/marketing/plan-intent";
 import { getMetadataBase } from "@/lib/site";
 import "./globals.css";
 
@@ -78,31 +72,7 @@ export default function RootLayout({
       className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable}`}
     >
       <body className="min-h-dvh bg-background text-foreground antialiased">
-        <ClerkProvider
-          dynamic
-          ui={ui}
-          localization={clerkBusinessLocalization}
-          taskUrls={{
-            "choose-organization": "/session-tasks/choose-organization",
-          }}
-          appearance={{
-            theme: shadcn,
-            elements: {
-              // Clerk's fixed drawers intentionally ship without a z-index.
-              // Keep checkout and its backdrop above flippinCalendar's sticky UI.
-              drawerBackdrop: { zIndex: 9_999 },
-              drawerRoot: { zIndex: 10_000 },
-            },
-          }}
-          signInUrl="/sign-in"
-          signUpUrl="/sign-up"
-          signInFallbackRedirectUrl={buildAuthCompleteUrl(null)}
-          signUpFallbackRedirectUrl={buildAuthCompleteUrl(null)}
-          afterSignOutUrl="/sign-in"
-        >
-          <Providers>{children}</Providers>
-        </ClerkProvider>
-        <Analytics />
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

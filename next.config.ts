@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 /**
- * Production-oriented Next config.
- * Cloudflare sits in front of the Vercel deployment for flippincalendar.co.za
- * (DNS / WAF / CDN). Do not enable cutover until DNS + Clerk Production are ready.
+ * Production-oriented Next config for flippincalendar.co.za.
  */
 const nextConfig: NextConfig = {
   reactCompiler: true,

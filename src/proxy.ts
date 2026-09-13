@@ -1,88 +1,53 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
-import {
-  PLAN_INTENT_COOKIE,
-  buildAppEntryUrl,
-  normalizePlanIntent,
-} from "@/lib/marketing/plan-intent";
-import { isFreePlan } from "@/lib/marketing/plans";
-import { getClerkAuthorizedParties } from "@/lib/site";
+const APP_REGEX = /^\/app(?:\/.*)?$/;
+const API_APP_REGEX = /^\/api\/app(?:\/.*)?$/;
 
-const isAppRoute = createRouteMatcher(["/app(.*)"]);
-const isBillingCheckout = createRouteMatcher([
-  "/app/(.*)/billing",
-]);
+export async function proxy(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request });
 
-export default clerkMiddleware(
-  async (auth, req) => {
-    // Clerk sometimes lands choose-organization with redirect_url pointing at
-    // the task page itself. Rewrite that to /app so selecting an org can finish.
-    if (
-      req.nextUrl.pathname === "/sign-in/tasks/choose-organization" ||
-      req.nextUrl.pathname === "/sign-up/tasks/choose-organization"
-    ) {
-      const redirectUrl = req.nextUrl.searchParams.get("redirect_url");
-      const isCircular =
-        !redirectUrl ||
-        redirectUrl.includes("/sign-in/tasks/choose-organization") ||
-        redirectUrl.includes("/sign-up/tasks/choose-organization") ||
-        redirectUrl.includes("/session-tasks/choose-organization");
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-      if (isCircular) {
-        const planIntent = normalizePlanIntent(
-          req.cookies.get(PLAN_INTENT_COOKIE)?.value,
-        );
-        const target = req.nextUrl.clone();
-        target.searchParams.set(
-          "redirect_url",
-          new URL(buildAppEntryUrl(planIntent), req.nextUrl.origin).toString(),
-        );
-        return NextResponse.redirect(target);
-      }
-    }
+  if (!url || !publishableKey) {
+    return supabaseResponse;
+  }
 
-    // Do not auth.protect() /session-tasks — pending choose-organization
-    // sessions must reach that page if it is still used; protect() treats
-    // pending as signed-out and bounces users into a redirect loop.
-    const planParam = req.nextUrl.searchParams.get("plan");
-    const planIntent = normalizePlanIntent(planParam);
-    const response = NextResponse.next();
+  const supabase = createServerClient(url, publishableKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value } of cookiesToSet) {
+          request.cookies.set(name, value);
+        }
+        supabaseResponse = NextResponse.next({ request });
+        for (const { name, value, options } of cookiesToSet) {
+          supabaseResponse.cookies.set(name, value, options);
+        }
+      },
+    },
+  });
 
-  if (planIntent && !isFreePlan(planIntent.key)) {
-      response.cookies.set(PLAN_INTENT_COOKIE, planIntent.key, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: 60 * 60 * 24,
-      });
-    }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    if (
-      isBillingCheckout(req) &&
-      req.nextUrl.searchParams.get("checkout") === "1"
-    ) {
-      response.cookies.delete(PLAN_INTENT_COOKIE);
-    }
+  const pathname = request.nextUrl.pathname;
+  if (
+    (APP_REGEX.test(pathname) || API_APP_REGEX.test(pathname)) &&
+    !user
+  ) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/sign-in";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
 
-    if (isAppRoute(req)) {
-      // Pending sessions must reach /app after org selection; protect() alone
-      // treats pending as signed-out and loops choose-organization forever.
-      const session = await auth({ treatPendingAsSignedOut: false });
-      if (!session.userId) {
-        await auth.protect();
-      }
-    }
-
-    return response;
-  },
-  {
-    signInUrl: "/sign-in",
-    signUpUrl: "/sign-up",
-    authorizedParties: getClerkAuthorizedParties(),
-  },
-);
+  return supabaseResponse;
+}
 
 export const config = {
   matcher: [
