@@ -1,5 +1,7 @@
+"use client";
+
 import { createBrowserClient } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AuthChangeEvent, SupabaseClient } from "@supabase/supabase-js";
 
 let browserClient: SupabaseClient | undefined;
 
@@ -17,4 +19,23 @@ export function createClient() {
     browserClient = createBrowserClient(url, publishableKey);
   }
   return browserClient;
+}
+
+/**
+ * Subscribe to Supabase auth state changes.
+ * Returns an unsubscribe function. Use in client components or hooks.
+ */
+export function onAuthStateChange(
+  callback: (
+    event: AuthChangeEvent,
+    session: import("@supabase/supabase-js").Session | null,
+  ) => void,
+) {
+  const supabase = createClient();
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (event, session) => {
+      callback(event, session);
+    },
+  );
+  return () => subscription.unsubscribe();
 }

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const APP_REGEX = /^\/app(?:\/.*)?$/;
 const API_APP_REGEX = /^\/api\/app(?:\/.*)?$/;
+const AUTH_PATHS = ["/auth/callback", "/auth/confirm"];
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -31,17 +32,40 @@ export async function proxy(request: NextRequest) {
     },
   });
 
+  // Refresh session cookies — must happen on every request
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+
+  // Allow auth callback and confirmation pages through without redirect
+  const isAuthPath = AUTH_PATHS.some(
+    (authPath) => pathname === authPath || pathname.startsWith(`${authPath}/`),
+  );
+
+  if (isAuthPath) {
+    return supabaseResponse;
+  }
+
+  // Redirect unauthenticated users away from protected /app routes
   if (
     (APP_REGEX.test(pathname) || API_APP_REGEX.test(pathname)) &&
     !user
   ) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/sign-in";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Redirect authenticated users from sign-in/sign-up to app
+  if (
+    user &&
+    (pathname === "/sign-in" || pathname === "/sign-up" || pathname.startsWith("/sign-in/") || pathname.startsWith("/sign-up/"))
+  ) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/app";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 import { signInAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -12,6 +15,8 @@ export function SignInPanel({
   signUpUrl: string;
   error?: string | null;
 }) {
+  const [isPending, setIsPending] = useState(false);
+
   return (
     <div className="w-full rounded-xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
       <div className="mb-6">
@@ -32,7 +37,13 @@ export function SignInPanel({
         </div>
       ) : null}
 
-      <form action={signInAction} className="space-y-4">
+      <form
+        action={async (formData) => {
+          setIsPending(true);
+          await signInAction(formData);
+        }}
+        className="space-y-4"
+      >
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
           <Input
@@ -53,8 +64,8 @@ export function SignInPanel({
             required
           />
         </div>
-        <Button type="submit" className="w-full">
-          Sign in
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
 

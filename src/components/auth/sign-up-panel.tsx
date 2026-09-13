@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 import { signUpAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -12,6 +15,8 @@ export function SignUpPanel({
   signInUrl: string;
   error?: string | null;
 }) {
+  const [isPending, setIsPending] = useState(false);
+
   return (
     <div className="w-full rounded-xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
       <div className="mb-6">
@@ -19,7 +24,7 @@ export function SignUpPanel({
           Create your account
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Start free — no card needed.
+          Start free — no card needed. We will send a confirmation email.
         </p>
       </div>
 
@@ -32,7 +37,13 @@ export function SignUpPanel({
         </div>
       ) : null}
 
-      <form action={signUpAction} className="space-y-4">
+      <form
+        action={async (formData) => {
+          setIsPending(true);
+          await signUpAction(formData);
+        }}
+        className="space-y-4"
+      >
         <div className="space-y-1.5">
           <Label htmlFor="name">Full name</Label>
           <Input id="name" name="name" type="text" autoComplete="name" />
@@ -57,9 +68,10 @@ export function SignUpPanel({
             minLength={8}
             required
           />
+          <p className="text-xs text-muted-foreground">At least 8 characters.</p>
         </div>
-        <Button type="submit" className="w-full">
-          Create account
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending ? "Creating account…" : "Create account"}
         </Button>
       </form>
 
